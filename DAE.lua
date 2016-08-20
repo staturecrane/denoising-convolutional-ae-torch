@@ -50,8 +50,6 @@ function createSamples()
   train_idx = 1
 end
 
-createSamples()
-
 test_count = 1
 test_start = 50000
 
@@ -141,7 +139,7 @@ end
 
 for epoch = 1, 400 do
 
-  if epoch > 1 then createSamples() end
+  createSamples()
 
   local loss = trainEpoch(1, batch_size, epoch)
   print('loss at epoch ' .. epoch .. ': ' .. loss)
