@@ -28,9 +28,7 @@ function getFilename(num)
   return filename
 end
 
-train_shuffle_size = 40000
-train_shuffle = torch.randperm(train_shuffle_size)
-train_shuffle_idx = 1
+train_random_end = 50000
 train_idx = 1
 
 
@@ -38,23 +36,19 @@ function createSamples()
   print('Moving images to GPU ...')
   for i = 1, train_size do
     xlua.progress(i, train_size)
-    local sample = image.load(getFilename(train_shuffle[train_shuffle_idx + i]))
+    local sample = image.load(getFilename(torch.random(1, train_random_end)))
     train_images[train_idx] = sample
     train_idx = train_idx + 1
-    if train_shuffle_idx >= 65000 then
-      train_shuffle_idx = 1
-    else
-      train_shuffle_idx = train_shuffle_idx + 1
-    end
   end
   train_idx = 1
 end
 
 test_count = 1
-test_start = 50000
+test_start = 60000
+test_random_end = 70000
 
 for i = 1, test_size  do
-  local sample = image.load(getFilename(torch.random(test_start, test_start + test_size - 1)))
+  local sample = image.load(getFilename(torch.random(test_start, test_random_end)))
   test_images[test_count] = sample
   test_count = test_count + 1
 end
@@ -82,7 +76,8 @@ decoder:add(nn.SpatialConvolution(feature_size, channels, kernel_size, kernel_si
 decoder:add(nn.Sigmoid(true))
 
 autoencoder = nn.Sequential()
-noiser = nn.WhiteNoise(0, 0.5)
+
+noiser = nn.WhiteNoise(0, 0.25)
 autoencoder:add(noiser)
 autoencoder:add(encoder)
 autoencoder:add(decoder)
@@ -95,7 +90,9 @@ theta, gradTheta = autoencoder:getParameters()
 
 autoencoder:training()
 
-optimParams = {learning_rate = 0.00001}
+learning_rate = 0.000001
+
+optimParams = {learning_rate}
 losses = {}
 
 require 'optim'
@@ -137,16 +134,26 @@ function trainEpoch(index, batchSize, epoch)
     return loss[1]
 end
 
-for epoch = 1, 400 do
+for epoch = 1, 300 do
 
   createSamples()
 
   local loss = trainEpoch(1, batch_size, epoch)
   print('loss at epoch ' .. epoch .. ': ' .. loss)
 
-  autoencoder:evaluate()
+  if epoch == 1 then
+    for i = 1, test_size do
+      image.save('reconstructions/originals/2001_original_' .. i .. '.jpg', test_images[i])
+    end
+  end
 
+  autoencoder:evaluate()
   xHat = autoencoder(test_images)
-  image.save('reconstructions/2001_epoch_' .. epoch .. '.png', xHat[1])
+
+  for i = 1, test_size do
+    image.save('reconstructions/' .. i .. '/2001_epoch_' .. epoch .. '.jpg', xHat[i])
+  end
+
   autoencoder:training()
+
 end
