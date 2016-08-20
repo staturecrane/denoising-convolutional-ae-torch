@@ -10,9 +10,13 @@ torch.setheaptracking(true)
 torch.setdefaulttensortype('torch.FloatTensor')
 
 train_size = 100
+test_size = 40
+channels = 3
+width = 96
+height = 96
 
-test_images = torch.Tensor(40, 3, 96, 96):cuda()
-train_images = torch.Tensor(train_size, 3, 96, 96):cuda()
+test_images = torch.Tensor(test_size, channels, height, width):cuda()
+train_images = torch.Tensor(train_size, channels, height, width):cuda()
 
 function getFilename(num)
   length = #tostring(num)
@@ -24,32 +28,35 @@ function getFilename(num)
   return filename
 end
 
-local shuffle = torch.randperm(65000)
+train_shuffle_size = 40000
+train_shuffle = torch.randperm(train_shuffle_size)
+train_shuffle_idx = 1
+train_idx = 1
 
-train_count = 1
-
-print('Moving images to GPU ...')
-
-idx = 1
 
 function createSamples()
-  for i = 1, train_size - 1 do
+  print('Moving images to GPU ...')
+  for i = 1, train_size do
     xlua.progress(i, train_size)
-    local sample = image.load(getFilename(shuffle[idx + i]))
-    train_images[train_count] = sample
-    train_count = train_count + 1
-    idx = idx + 1
-    if idx >= 65000 then idx = 1 end
+    local sample = image.load(getFilename(train_shuffle[train_shuffle_idx + i]))
+    train_images[train_idx] = sample
+    train_idx = train_idx + 1
+    if train_shuffle_idx >= 65000 then
+      train_shuffle_idx = 1
+    else
+      train_shuffle_idx = train_shuffle_idx + 1
+    end
   end
-  train_count = 1
+  train_idx = 1
 end
 
 createSamples()
 
 test_count = 1
+test_start = 50000
 
-for i = 70001, 70040 do
-  local sample = image.load(getFilename(i))
+for i = 1, test_size  do
+  local sample = image.load(getFilename(torch.random(test_start, test_start + test_size - 1)))
   test_images[test_count] = sample
   test_count = test_count + 1
 end
@@ -57,22 +64,27 @@ end
 require 'nn'
 require 'dpnn'
 
+feature_size = 64
+kernel_size = 3
+padding = 1
+stride = 1
+
 encoder = nn.Sequential()
-encoder:add(nn.SpatialConvolution(3, 64, 3, 3, 1, 1, 1, 1))
+encoder:add(nn.SpatialConvolution(channels, feature_size, kernel_size, kernel_size, stride, stride, padding, padding))
 encoder:add(nn.ReLU(true))
-encoder:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, 1, 1))
+encoder:add(nn.SpatialConvolution(feature_size, feature_size, kernel_size, kernel_size, stride, stride, padding, padding))
 encoder:add(nn.ReLU(true))
 
 decoder = nn.Sequential()
-decoder:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, 1, 1))
+decoder:add(nn.SpatialConvolution(feature_size, feature_size, kernel_size, kernel_size, stride, stride, padding, padding))
 decoder:add(nn.ReLU(true))
-decoder:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, 1, 1))
+decoder:add(nn.SpatialConvolution(feature_size, feature_size, kernel_size, kernel_size, stride, stride, padding, padding))
 decoder:add(nn.ReLU(true))
-decoder:add(nn.SpatialConvolution(64, 3, 3, 3, 1, 1, 1, 1))
+decoder:add(nn.SpatialConvolution(feature_size, channels, kernel_size, kernel_size, stride, stride, padding, padding))
 decoder:add(nn.Sigmoid(true))
 
 autoencoder = nn.Sequential()
-noiser = nn.WhiteNoise(0, 0.5) -- Add white noise to inputs during training
+noiser = nn.WhiteNoise(0, 0.5)
 autoencoder:add(noiser)
 autoencoder:add(encoder)
 autoencoder:add(decoder)
@@ -128,12 +140,14 @@ function trainEpoch(index, batchSize, epoch)
 end
 
 for epoch = 1, 400 do
-  if epoch > 1 then
-    createSamples()
-  end
+
+  if epoch > 1 then createSamples() end
+
   local loss = trainEpoch(1, batch_size, epoch)
   print('loss at epoch ' .. epoch .. ': ' .. loss)
+
   autoencoder:evaluate()
+
   xHat = autoencoder(test_images)
   image.save('reconstructions/2001_epoch_' .. epoch .. '.png', xHat[1])
   autoencoder:training()
