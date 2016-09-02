@@ -5,8 +5,6 @@ require 'xlua'
 hasCudnn, cudnn = pcall(require, 'cudnn')
 assert(hasCudnn)
 
-cutorch.setHeapTracking(true)
-torch.setheaptracking(true)
 torch.setdefaulttensortype('torch.FloatTensor')
 
 train_size = 100
@@ -82,8 +80,8 @@ autoencoder:add(noiser)
 autoencoder:add(encoder)
 autoencoder:add(decoder)
 
-autoencoder = autoencoder:cuda():cuda()
-cudnn.convert(autoencoder, cudnn):cuda()
+autoencoder = autoencoder:cuda()
+cudnn.convert(autoencoder, cudnn)
 criterion = nn.BCECriterion():cuda()
 
 theta, gradTheta = autoencoder:getParameters()
@@ -123,7 +121,6 @@ function trainEpoch(index, batchSize, epoch)
     x = nil
     autoencoder:clearState()
 
-    collectgarbage('collect')
     collectgarbage('collect')
 
     print('Loss at iteration ' .. index .. ': ' .. loss[1])
